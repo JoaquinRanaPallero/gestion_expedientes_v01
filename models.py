@@ -1,0 +1,67 @@
+"""Modelos de datos para la aplicacion de gestion de expedientes."""
+
+from dataclasses import dataclass, field
+from typing import Optional
+
+
+@dataclass
+class Expediente:
+    id: Optional[int] = None
+    numero: str = ""
+    caratula: str = ""
+    fuero_juzgado: str = ""
+    fecha_inicio: str = ""
+    tipo_proceso: str = ""
+    estado: str = "activo"  # activo / archivado / cerrado
+    observaciones: str = ""
+
+
+@dataclass
+class Parte:
+    id: Optional[int] = None
+    expediente_id: Optional[int] = None
+    nombre: str = ""
+    tipo: str = ""  # actor / demandado / tercero / perito / etc.
+    dni_cuit: str = ""
+    domicilio: str = ""
+    telefono: str = ""
+    email: str = ""
+
+
+@dataclass
+class PasoProcesal:
+    id: Optional[int] = None
+    expediente_id: Optional[int] = None
+    fecha: str = ""
+    descripcion: str = ""
+    observaciones: str = ""
+
+
+@dataclass
+class Vencimiento:
+    id: Optional[int] = None
+    expediente_id: Optional[int] = None
+    fecha: str = ""
+    descripcion: str = ""
+    estado: str = "pendiente"  # pendiente / cumplido / vencido
+
+
+@dataclass
+class Honorario:
+    id: Optional[int] = None
+    expediente_id: Optional[int] = None
+    fecha: str = ""
+    monto: float = 0.0
+    moneda: str = "ARS"  # ARS / USD
+    concepto: str = ""
+    forma_pago: str = ""
+
+
+@dataclass
+class Gasto:
+    id: Optional[int] = None
+    expediente_id: Optional[int] = None
+    fecha: str = ""
+    monto: float = 0.0
+    moneda: str = "ARS"  # ARS / USD
+    descripcion: str = ""
