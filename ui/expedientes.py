@@ -93,7 +93,7 @@ class PanelExpedientes(ttk.Frame):
         self.tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        self.tree.bind("<Double-1>", lambda e: self._ver_detalle())
+        self.tree.bind("<Double-1>", lambda e: self._ver_detalle_pasos())
 
         # Botones inferiores
         btn_frame = ttk.Frame(self)
@@ -251,3 +251,9 @@ class PanelExpedientes(ttk.Frame):
         if exp_id is None:
             return
         VentanaDetalleExpediente(self, exp_id)
+
+    def _ver_detalle_pasos(self):
+        exp_id = self._get_selected_id()
+        if exp_id is None:
+            return
+        VentanaDetalleExpediente(self, exp_id, initial_tab=2)

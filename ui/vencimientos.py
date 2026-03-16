@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 import database as db
 from models import Vencimiento
-from ui.dialogs import fecha_display
+from ui.dialogs import FormDialog, fecha_display, fecha_hoy
 from ui.styles import COLOR_VENCIDO, COLOR_INMINENTE, COLOR_CUMPLIDO
 
 
@@ -33,6 +33,10 @@ class PanelVencimientosGlobales(ttk.Frame):
         self.filtro_estado.pack(side="left")
         self.filtro_estado.bind("<<ComboboxSelected>>", lambda e: self.refrescar())
 
+        self.mostrar_cumplidos = tk.BooleanVar(value=False)
+        ttk.Checkbutton(filtro_frame, text="Ver cumplidos", variable=self.mostrar_cumplidos,
+                        command=self.refrescar).pack(side="left", padx=(15, 0))
+
         ttk.Label(filtro_frame, text="   Cambiar a:").pack(side="left", padx=(20, 5))
         self.combo_nuevo_estado = ttk.Combobox(
             filtro_frame, values=["pendiente", "cumplido", "vencido"],
@@ -40,6 +44,7 @@ class PanelVencimientosGlobales(ttk.Frame):
         self.combo_nuevo_estado.set("cumplido")
         self.combo_nuevo_estado.pack(side="left", padx=(0, 5))
         ttk.Button(filtro_frame, text="Aplicar", command=self._cambiar_estado).pack(side="left")
+        ttk.Button(filtro_frame, text="Editar", command=self._editar_vencimiento).pack(side="left", padx=(10, 0))
 
         # Tabla
         tree_frame = ttk.Frame(self)
@@ -75,6 +80,41 @@ class PanelVencimientosGlobales(ttk.Frame):
             tk.Canvas(leyenda, width=14, height=14, bg=color, highlightthickness=0).pack(
                 side="left", padx=(0, 3))
             ttk.Label(leyenda, text=texto).pack(side="left", padx=(0, 15))
+
+    def _editar_vencimiento(self):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showinfo("Seleccionar", "Seleccione un vencimiento.", parent=self)
+            return
+        iid = sel[0]
+        v_data = self._venc_data.get(iid)
+        if not v_data:
+            return
+        campos = [
+            {"name": "fecha", "label": "Fecha (DD/MM/AAAA)", "required": True,
+             "validate": "fecha", "default": fecha_hoy()},
+            {"name": "descripcion", "label": "Descripcion", "required": True},
+            {"name": "estado", "label": "Estado", "type": "combo",
+             "options": ["pendiente", "cumplido", "vencido"], "default": "pendiente"},
+        ]
+        values = {
+            "fecha": fecha_display(v_data["fecha"]),
+            "descripcion": v_data["descripcion"],
+            "estado": v_data["estado"],
+        }
+        dlg = FormDialog(self, "Editar Vencimiento", campos, values)
+        self.wait_window(dlg)
+        if dlg.result:
+            r = dlg.result
+            venc = Vencimiento(id=v_data["id"], expediente_id=v_data["expediente_id"],
+                               fecha=r["fecha"], descripcion=r["descripcion"],
+                               estado=r["estado"])
+            try:
+                db.actualizar_vencimiento(venc)
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo actualizar el vencimiento:\n{e}", parent=self)
+                return
+            self.refrescar()
 
     def _cambiar_estado(self):
         sel = self.tree.selection()
@@ -122,6 +162,9 @@ class PanelVencimientosGlobales(ttk.Frame):
                         tag = "inminente"
                 except ValueError:
                     pass
+
+            if tag == "cumplido" and not self.mostrar_cumplidos.get():
+                continue
 
             iid = str(v["id"])
             self._venc_data[iid] = v
