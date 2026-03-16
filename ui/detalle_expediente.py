@@ -11,7 +11,7 @@ from ui.styles import COLOR_VENCIDO, COLOR_INMINENTE, COLOR_CUMPLIDO
 
 
 class VentanaDetalleExpediente(tk.Toplevel):
-    def __init__(self, parent, expediente_id: int):
+    def __init__(self, parent, expediente_id: int, initial_tab: int = 0):
         super().__init__(parent)
         self.exp_id = expediente_id
         self.exp = db.obtener_expediente(expediente_id)
@@ -28,6 +28,8 @@ class VentanaDetalleExpediente(tk.Toplevel):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._build()
+        if initial_tab > 0:
+            self.notebook.select(initial_tab)
 
     def _on_close(self):
         """Al cerrar, refresca la lista de expedientes del panel padre."""
@@ -217,7 +219,7 @@ class VentanaDetalleExpediente(tk.Toplevel):
             {"name": "fecha", "label": "Fecha (DD/MM/AAAA)", "required": True,
              "validate": "fecha", "default": fecha_hoy()},
             {"name": "descripcion", "label": "Descripcion", "required": True},
-            {"name": "observaciones", "label": "Observaciones", "type": "text"},
+            {"name": "observaciones", "label": "Observaciones", "type": "text", "height": 8},
         ]
 
     def _nuevo_paso(self):
