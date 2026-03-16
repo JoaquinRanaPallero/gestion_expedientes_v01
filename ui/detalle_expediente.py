@@ -8,6 +8,7 @@ import database as db
 from models import Parte, PasoProcesal, Vencimiento, Honorario, Gasto
 from ui.dialogs import FormDialog, confirmar, fecha_hoy, fecha_display
 from ui.styles import COLOR_VENCIDO, COLOR_INMINENTE, COLOR_CUMPLIDO
+from ui.honorarios import _fmt_monto
 
 
 class VentanaDetalleExpediente(tk.Toplevel):
@@ -431,10 +432,10 @@ class VentanaDetalleExpediente(tk.Toplevel):
             self.tree_hon.delete(item)
         for h in db.listar_honorarios(self.exp_id):
             self.tree_hon.insert("", "end", iid=str(h.id),
-                                 values=(fecha_display(h.fecha), f"{h.monto:,.2f}", h.moneda,
+                                 values=(fecha_display(h.fecha), _fmt_monto(h.monto), h.moneda,
                                          h.concepto, h.forma_pago))
         totales = db.totales_honorarios(self.exp_id)
-        partes = [f"{moneda}: {total:,.2f}" for moneda, total in sorted(totales.items())]
+        partes = [f"{moneda}: {_fmt_monto(total)}" for moneda, total in sorted(totales.items())]
         self.lbl_totales_hon.config(text=("Totales:  " + "   |   ".join(partes)) if partes else "Sin honorarios registrados")
 
     def _nuevo_honorario(self):
@@ -513,10 +514,10 @@ class VentanaDetalleExpediente(tk.Toplevel):
             self.tree_gastos.delete(item)
         for g in db.listar_gastos(self.exp_id):
             self.tree_gastos.insert("", "end", iid=str(g.id),
-                                    values=(fecha_display(g.fecha), f"{g.monto:,.2f}", g.moneda,
+                                    values=(fecha_display(g.fecha), _fmt_monto(g.monto), g.moneda,
                                             g.descripcion))
         totales = db.totales_gastos(self.exp_id)
-        partes = [f"{moneda}: {total:,.2f}" for moneda, total in sorted(totales.items())]
+        partes = [f"{moneda}: {_fmt_monto(total)}" for moneda, total in sorted(totales.items())]
         self.lbl_totales_gastos.config(
             text=("Saldo gastos:  " + "   |   ".join(partes)) if partes else "Sin gastos registrados")
 

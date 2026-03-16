@@ -93,7 +93,7 @@ class PanelExpedientes(ttk.Frame):
         self.tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        self.tree.bind("<Double-1>", lambda e: self._ver_detalle_pasos())
+        self.tree.bind("<Double-1>", self._on_double_click)
 
         # Botones inferiores
         btn_frame = ttk.Frame(self)
@@ -120,6 +120,11 @@ class PanelExpedientes(ttk.Frame):
                 exp.numero, exp.caratula, exp.fuero_juzgado,
                 fecha_display(exp.fecha_inicio), exp.tipo_proceso, exp.estado, ultimo,
             ))
+
+    def _on_double_click(self, event):
+        """Solo abre detalle si el doble-click fue sobre una fila, no sobre el header."""
+        if self.tree.identify_region(event.x, event.y) in ("cell", "tree"):
+            self._ver_detalle_pasos()
 
     def _ordenar_por(self, col: str):
         """Ordena el Treeview al clickear en el header de una columna."""

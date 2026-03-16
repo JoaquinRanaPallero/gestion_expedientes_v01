@@ -163,7 +163,7 @@ class PanelVencimientosGlobales(ttk.Frame):
                 except ValueError:
                     pass
 
-            if tag == "cumplido" and not self.mostrar_cumplidos.get():
+            if tag == "cumplido" and not self.mostrar_cumplidos.get() and self.filtro_estado.get() != "cumplido":
                 continue
 
             iid = str(v["id"])

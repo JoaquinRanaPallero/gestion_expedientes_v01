@@ -2,17 +2,17 @@
 
 import tkinter as tk
 from tkinter import ttk
-from locale import setlocale, LC_ALL, format_string
+from locale import setlocale, LC_NUMERIC, format_string
 
 import database as db
 from ui.dialogs import fecha_display
 
 # Intentar locale para formato de numeros
 try:
-    setlocale(LC_ALL, "es_AR.UTF-8")
+    setlocale(LC_NUMERIC, "es_AR.UTF-8")
 except Exception:
     try:
-        setlocale(LC_ALL, "Spanish_Argentina")
+        setlocale(LC_NUMERIC, "Spanish_Argentina")
     except Exception:
         pass
 

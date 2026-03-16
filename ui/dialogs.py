@@ -81,7 +81,7 @@ class FormDialog(tk.Toplevel):
                 default = (values or {}).get(field["name"], field.get("default", ""))
                 if default and default in field["options"]:
                     widget.set(default)
-                elif field["options"]:
+                elif not values and field["options"]:
                     widget.set(field["options"][0])
             elif field.get("type") == "text":
                 widget = tk.Text(main_frame, width=33, height=field.get("height", 4), font=("Segoe UI", 10))
