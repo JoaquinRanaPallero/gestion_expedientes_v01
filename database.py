@@ -1,10 +1,20 @@
 """Capa de base de datos SQLite para gestion de expedientes."""
 
 import sqlite3
+import sys
 import os
+import unicodedata
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Optional
+
+
+def _normalize(text: str) -> str:
+    """Quita acentos y pasa a minusculas para comparaciones."""
+    if not text:
+        return ""
+    nfkd = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).lower()
 
 from models import Expediente, Parte, PasoProcesal, Vencimiento, Honorario, Gasto
 
@@ -12,7 +22,11 @@ DB_NAME = "expedientes.db"
 
 
 def _get_db_path() -> str:
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), DB_NAME)
+    if getattr(sys, 'frozen', False):
+        base = os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, DB_NAME)
 
 
 @contextmanager
@@ -21,6 +35,7 @@ def _connect():
     conn = sqlite3.connect(_get_db_path())
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.create_function("normalize", 1, _normalize)
     try:
         yield conn
         conn.commit()
@@ -31,12 +46,61 @@ def _connect():
         conn.close()
 
 
+def _fix_fk_references(conn) -> None:
+    """Repara tablas hijas cuyas FK apuntan a _expedientes_old en vez de expedientes.
+
+    ALTER TABLE RENAME en SQLite actualiza automaticamente las FK de tablas hijas,
+    lo que corrompe las referencias cuando se usa el patron rename-recreate-drop.
+    """
+    row = conn.execute(
+        "SELECT COUNT(*) as cnt FROM sqlite_master WHERE sql LIKE '%expedientes_old%'"
+    ).fetchone()
+    if row["cnt"] > 0:
+        conn.execute("PRAGMA writable_schema = ON")
+        conn.execute(
+            "UPDATE sqlite_master SET sql = REPLACE(sql, '_expedientes_old', 'expedientes') "
+            "WHERE sql LIKE '%expedientes_old%'"
+        )
+        conn.execute("PRAGMA writable_schema = OFF")
+
+
+def _migrate_db(conn) -> None:
+    """Migraciones para bases de datos existentes."""
+    # Reparar FK corruptas de migraciones anteriores
+    _fix_fk_references(conn)
+
+    # Permitir numero NULL (quitar NOT NULL)
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='expedientes'"
+    ).fetchone()
+    if row and "numero TEXT NOT NULL UNIQUE" in row["sql"]:
+        conn.executescript("""
+            PRAGMA foreign_keys = OFF;
+            ALTER TABLE expedientes RENAME TO _expedientes_old;
+            CREATE TABLE expedientes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                numero TEXT UNIQUE,
+                caratula TEXT NOT NULL,
+                fuero_juzgado TEXT DEFAULT '',
+                fecha_inicio TEXT DEFAULT '',
+                tipo_proceso TEXT DEFAULT '',
+                estado TEXT DEFAULT 'activo' CHECK(estado IN ('activo','archivado','cerrado')),
+                observaciones TEXT DEFAULT ''
+            );
+            INSERT INTO expedientes SELECT * FROM _expedientes_old;
+            DROP TABLE _expedientes_old;
+        """)
+        # RENAME actualizó las FK de tablas hijas -> reparar
+        _fix_fk_references(conn)
+        conn.execute("PRAGMA foreign_keys = ON")
+
+
 def init_db() -> None:
     with _connect() as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS expedientes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                numero TEXT NOT NULL UNIQUE,
+                numero TEXT UNIQUE,
                 caratula TEXT NOT NULL,
                 fuero_juzgado TEXT DEFAULT '',
                 fecha_inicio TEXT DEFAULT '',
@@ -96,16 +160,18 @@ def init_db() -> None:
                 FOREIGN KEY (expediente_id) REFERENCES expedientes(id) ON DELETE CASCADE
             );
         """)
+        _migrate_db(conn)
 
 
 # --- Expedientes ---
 
 def crear_expediente(exp: Expediente) -> int:
     with _connect() as conn:
+        numero = exp.numero if exp.numero and exp.numero.strip() else None
         c = conn.execute(
             "INSERT INTO expedientes (numero, caratula, fuero_juzgado, fecha_inicio, tipo_proceso, estado, observaciones) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (exp.numero, exp.caratula, exp.fuero_juzgado, exp.fecha_inicio,
+            (numero, exp.caratula, exp.fuero_juzgado, exp.fecha_inicio,
              exp.tipo_proceso, exp.estado, exp.observaciones),
         )
         return c.lastrowid
@@ -113,10 +179,11 @@ def crear_expediente(exp: Expediente) -> int:
 
 def actualizar_expediente(exp: Expediente) -> None:
     with _connect() as conn:
+        numero = exp.numero if exp.numero and exp.numero.strip() else None
         conn.execute(
             "UPDATE expedientes SET numero=?, caratula=?, fuero_juzgado=?, fecha_inicio=?, "
             "tipo_proceso=?, estado=?, observaciones=? WHERE id=?",
-            (exp.numero, exp.caratula, exp.fuero_juzgado, exp.fecha_inicio,
+            (numero, exp.caratula, exp.fuero_juzgado, exp.fecha_inicio,
              exp.tipo_proceso, exp.estado, exp.observaciones, exp.id),
         )
 
@@ -140,17 +207,17 @@ def listar_expedientes(filtro_numero: str = "", filtro_caratula: str = "",
         query = "SELECT * FROM expedientes WHERE 1=1"
         params: list = []
         if filtro_numero:
-            query += " AND numero LIKE ?"
-            params.append(f"%{filtro_numero}%")
+            query += " AND normalize(numero) LIKE ?"
+            params.append(f"%{_normalize(filtro_numero)}%")
         if filtro_caratula:
-            query += " AND caratula LIKE ?"
-            params.append(f"%{filtro_caratula}%")
+            query += " AND normalize(caratula) LIKE ?"
+            params.append(f"%{_normalize(filtro_caratula)}%")
         if filtro_estado:
             query += " AND estado = ?"
             params.append(filtro_estado)
         if filtro_juzgado:
-            query += " AND fuero_juzgado LIKE ?"
-            params.append(f"%{filtro_juzgado}%")
+            query += " AND normalize(fuero_juzgado) LIKE ?"
+            params.append(f"%{_normalize(filtro_juzgado)}%")
         query += " ORDER BY fecha_inicio DESC, id DESC"
         rows = conn.execute(query, params).fetchall()
         return [Expediente(**dict(r)) for r in rows]
@@ -178,6 +245,8 @@ def obtener_ultimos_movimientos() -> dict[int, str]:
 
 
 def numero_existe(numero: str, excluir_id: Optional[int] = None) -> bool:
+    if not numero or not numero.strip():
+        return False
     with _connect() as conn:
         if excluir_id:
             row = conn.execute(
@@ -297,7 +366,7 @@ def listar_vencimientos_globales(filtro_estado: str = "") -> list[dict]:
     hoy = datetime.now().date().isoformat()
     with _connect() as conn:
         query = (
-            "SELECT v.*, e.numero as expediente_numero FROM vencimientos v "
+            "SELECT v.*, e.caratula as expediente_caratula, COALESCE(e.numero, '') as expediente_numero FROM vencimientos v "
             "JOIN expedientes e ON v.expediente_id = e.id "
             "WHERE e.estado = 'activo'"
         )
@@ -349,6 +418,23 @@ def totales_honorarios(expediente_id: int) -> dict[str, float]:
             (expediente_id,),
         ).fetchall()
         return {r["moneda"]: r["total"] for r in rows}
+
+
+def listar_honorarios_globales(filtro_moneda: str = "") -> list[dict]:
+    with _connect() as conn:
+        query = (
+            "SELECT h.*, e.caratula as expediente_caratula "
+            "FROM honorarios h "
+            "JOIN expedientes e ON h.expediente_id = e.id "
+            "WHERE 1=1"
+        )
+        params: list = []
+        if filtro_moneda:
+            query += " AND h.moneda = ?"
+            params.append(filtro_moneda)
+        query += " ORDER BY h.fecha DESC"
+        rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
 
 
 # --- Gastos ---

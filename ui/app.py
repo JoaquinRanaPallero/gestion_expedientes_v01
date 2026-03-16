@@ -6,6 +6,7 @@ from tkinter import ttk
 from ui.styles import configurar_estilos, COLOR_SIDEBAR_BG, COLOR_SIDEBAR_FG, COLOR_BG
 from ui.expedientes import PanelExpedientes
 from ui.vencimientos import PanelVencimientosGlobales
+from ui.honorarios import PanelHonorariosGlobales
 
 
 class App(tk.Tk):
@@ -51,6 +52,7 @@ class App(tk.Tk):
         nav_items = [
             ("expedientes", "Expedientes"),
             ("vencimientos", "Vencimientos"),
+            ("honorarios", "Honorarios"),
         ]
 
         for key, label in nav_items:
@@ -85,6 +87,8 @@ class App(tk.Tk):
                 self._panels[nombre] = PanelExpedientes(self.content, self)
             elif nombre == "vencimientos":
                 self._panels[nombre] = PanelVencimientosGlobales(self.content, self)
+            elif nombre == "honorarios":
+                self._panels[nombre] = PanelHonorariosGlobales(self.content, self)
 
         self._panels[nombre].pack(fill="both", expand=True)
         if hasattr(self._panels[nombre], "refrescar"):

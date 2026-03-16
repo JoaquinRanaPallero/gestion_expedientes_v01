@@ -12,7 +12,7 @@ from ui.detalle_expediente import VentanaDetalleExpediente
 def _campos_expediente():
     """Genera los campos cada vez para que fecha_hoy() sea actual."""
     return [
-        {"name": "numero", "label": "Numero", "required": True},
+        {"name": "numero", "label": "Numero"},
         {"name": "caratula", "label": "Caratula", "required": True},
         {"name": "fuero_juzgado", "label": "Fuero / Juzgado"},
         {"name": "fecha_inicio", "label": "Fecha inicio (DD/MM/AAAA)", "validate": "fecha",
@@ -172,13 +172,15 @@ class PanelExpedientes(ttk.Frame):
         self.wait_window(dlg)
         if dlg.result:
             r = dlg.result
-            if db.numero_existe(r["numero"]):
-                messagebox.showwarning("Duplicado",
-                                       f"Ya existe un expediente con numero '{r['numero']}'.",
+            numero = r["numero"]
+            if numero and db.numero_existe(numero):
+                messagebox.showwarning("Numero duplicado",
+                                       f"Ya existe un expediente con numero '{numero}'.\n"
+                                       "Se guardara el expediente sin numero.",
                                        parent=self)
-                return
+                numero = ""
             exp = Expediente(
-                numero=r["numero"], caratula=r["caratula"],
+                numero=numero, caratula=r["caratula"],
                 fuero_juzgado=r["fuero_juzgado"], fecha_inicio=r["fecha_inicio"],
                 tipo_proceso=r["tipo_proceso"], estado=r["estado"],
                 observaciones=r["observaciones"],
@@ -208,12 +210,14 @@ class PanelExpedientes(ttk.Frame):
         self.wait_window(dlg)
         if dlg.result:
             r = dlg.result
-            if db.numero_existe(r["numero"], excluir_id=exp_id):
-                messagebox.showwarning("Duplicado",
-                                       f"Ya existe otro expediente con numero '{r['numero']}'.",
+            numero = r["numero"]
+            if numero and db.numero_existe(numero, excluir_id=exp_id):
+                messagebox.showwarning("Numero duplicado",
+                                       f"Ya existe otro expediente con numero '{numero}'.\n"
+                                       "Se guardara el expediente sin numero.",
                                        parent=self)
-                return
-            exp.numero = r["numero"]
+                numero = ""
+            exp.numero = numero
             exp.caratula = r["caratula"]
             exp.fuero_juzgado = r["fuero_juzgado"]
             exp.fecha_inicio = r["fecha_inicio"]
@@ -232,7 +236,7 @@ class PanelExpedientes(ttk.Frame):
         if exp_id is None:
             return
         exp = db.obtener_expediente(exp_id)
-        if exp and confirmar(self, f"Eliminar expediente '{exp.numero}'?\n"
+        if exp and confirmar(self, f"Eliminar expediente '{exp.numero or exp.caratula}'?\n"
                                     "Se eliminaran todas las partes, pasos, vencimientos, "
                                     "honorarios y gastos asociados."):
             try:

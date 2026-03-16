@@ -21,7 +21,7 @@ class VentanaDetalleExpediente(tk.Toplevel):
             return
 
         self._parent_panel = parent
-        self.title(f"Expediente: {self.exp.numero}")
+        self.title(f"Expediente: {self.exp.numero or self.exp.caratula}")
         self.geometry("950x650")
         self.minsize(800, 500)
         self.transient(parent)
@@ -39,8 +39,8 @@ class VentanaDetalleExpediente(tk.Toplevel):
         # Header con datos basicos
         header = ttk.Frame(self, padding=10)
         header.pack(fill="x")
-        ttk.Label(header, text=f"{self.exp.numero} - {self.exp.caratula}",
-                  style="Title.TLabel").pack(side="left")
+        titulo = f"{self.exp.numero} - {self.exp.caratula}" if self.exp.numero else self.exp.caratula
+        ttk.Label(header, text=titulo, style="Title.TLabel").pack(side="left")
         ttk.Label(header, text=f"Estado: {self.exp.estado.upper()}",
                   style="Subtitle.TLabel").pack(side="right")
 

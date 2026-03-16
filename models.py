@@ -15,6 +15,15 @@ class Expediente:
     estado: str = "activo"  # activo / archivado / cerrado
     observaciones: str = ""
 
+    def __post_init__(self):
+        # NULL de SQLite llega como None; normalizar a string vacio
+        if self.numero is None:
+            self.numero = ""
+        if self.fuero_juzgado is None:
+            self.fuero_juzgado = ""
+        if self.observaciones is None:
+            self.observaciones = ""
+
 
 @dataclass
 class Parte:

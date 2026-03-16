@@ -45,15 +45,15 @@ class PanelVencimientosGlobales(ttk.Frame):
         tree_frame = ttk.Frame(self)
         tree_frame.pack(fill="both", expand=True, padx=15, pady=10)
 
-        cols = ("fecha", "expediente", "descripcion", "estado")
+        cols = ("fecha", "caratula", "descripcion", "estado")
         self.tree = ttk.Treeview(tree_frame, columns=cols, show="headings", selectmode="browse")
 
         self.tree.heading("fecha", text="Fecha")
         self.tree.column("fecha", width=110, minwidth=80)
-        self.tree.heading("expediente", text="Expediente")
-        self.tree.column("expediente", width=140, minwidth=100)
+        self.tree.heading("caratula", text="Expediente (Caratula)")
+        self.tree.column("caratula", width=250, minwidth=120)
         self.tree.heading("descripcion", text="Descripcion")
-        self.tree.column("descripcion", width=400, minwidth=150)
+        self.tree.column("descripcion", width=300, minwidth=150)
         self.tree.heading("estado", text="Estado")
         self.tree.column("estado", width=100, minwidth=70)
 
@@ -127,5 +127,5 @@ class PanelVencimientosGlobales(ttk.Frame):
             self._venc_data[iid] = v
             estado_display = "vencido" if tag == "vencido" else v["estado"]
             self.tree.insert("", "end", iid=iid, values=(
-                fecha_display(v["fecha"]), v["expediente_numero"], v["descripcion"], estado_display
+                fecha_display(v["fecha"]), v["expediente_caratula"], v["descripcion"], estado_display
             ), tags=(tag,))
