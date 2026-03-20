@@ -243,9 +243,14 @@ class PanelExpedientes(ttk.Frame):
         exp = db.obtener_expediente(exp_id)
         if exp and confirmar(self, f"Eliminar expediente '{exp.numero or exp.caratula}'?\n"
                                     "Se eliminaran todas las partes, pasos, vencimientos, "
-                                    "honorarios y gastos asociados."):
+                                    "honorarios, gastos y adjuntos asociados."):
             try:
                 db.eliminar_expediente(exp_id)
+                # Limpiar carpeta de adjuntos fisicos
+                import shutil, os
+                carpeta = os.path.join(db._get_adjuntos_dir(), str(exp_id))
+                if os.path.isdir(carpeta):
+                    shutil.rmtree(carpeta, ignore_errors=True)
             except Exception as e:
                 messagebox.showerror("Error", f"No se pudo eliminar el expediente:\n{e}", parent=self)
                 return

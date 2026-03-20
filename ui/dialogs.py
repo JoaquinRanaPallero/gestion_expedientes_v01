@@ -46,9 +46,19 @@ def fecha_to_iso(fecha_display_str: str) -> str:
 
 # --- Otras validaciones ---
 
+def normalizar_monto(monto_str: str) -> str:
+    """Normaliza montos enteros. Los puntos se tratan como separador de miles y se eliminan."""
+    if not monto_str:
+        return monto_str
+    return monto_str.strip().replace(" ", "").replace(".", "")
+
+
 def validar_monto(monto_str: str) -> bool:
     try:
-        val = float(monto_str)
+        normalizado = normalizar_monto(monto_str)
+        if not normalizado:
+            return False
+        val = int(normalizado)
         return val >= 0
     except (ValueError, TypeError):
         return False
@@ -84,7 +94,7 @@ class FormDialog(tk.Toplevel):
                 elif not values and field["options"]:
                     widget.set(field["options"][0])
             elif field.get("type") == "text":
-                widget = tk.Text(main_frame, width=33, height=field.get("height", 4), font=("Segoe UI", 10))
+                widget = tk.Text(main_frame, width=field.get("width", 33), height=field.get("height", 4), font=("Segoe UI", 10))
                 default = (values or {}).get(field["name"], field.get("default", ""))
                 if default:
                     widget.insert("1.0", default)

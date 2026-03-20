@@ -16,7 +16,7 @@ def _normalize(text: str) -> str:
     nfkd = unicodedata.normalize("NFKD", text)
     return "".join(c for c in nfkd if not unicodedata.combining(c)).lower()
 
-from models import Expediente, Parte, PasoProcesal, Vencimiento, Honorario, Gasto
+from models import Expediente, Parte, PasoProcesal, Vencimiento, Honorario, Gasto, ArchivoAdjunto
 
 DB_NAME = "expedientes.db"
 
@@ -156,6 +156,16 @@ def init_db() -> None:
                 fecha TEXT NOT NULL,
                 monto REAL NOT NULL,
                 moneda TEXT DEFAULT 'ARS' CHECK(moneda IN ('ARS','USD')),
+                descripcion TEXT DEFAULT '',
+                FOREIGN KEY (expediente_id) REFERENCES expedientes(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS archivos_adjuntos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                expediente_id INTEGER NOT NULL,
+                nombre_archivo TEXT NOT NULL,
+                ruta TEXT NOT NULL,
+                fecha TEXT NOT NULL,
                 descripcion TEXT DEFAULT '',
                 FOREIGN KEY (expediente_id) REFERENCES expedientes(id) ON DELETE CASCADE
             );
@@ -470,3 +480,43 @@ def totales_gastos(expediente_id: int) -> dict[str, float]:
             (expediente_id,),
         ).fetchall()
         return {r["moneda"]: r["total"] for r in rows}
+
+
+# --- Archivos Adjuntos ---
+
+def _get_adjuntos_dir() -> str:
+    """Retorna la ruta base para almacenar archivos adjuntos."""
+    if getattr(sys, 'frozen', False):
+        base = os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, "adjuntos")
+
+
+def crear_adjunto(adj: ArchivoAdjunto) -> int:
+    with _connect() as conn:
+        c = conn.execute(
+            "INSERT INTO archivos_adjuntos (expediente_id, nombre_archivo, ruta, fecha, descripcion) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (adj.expediente_id, adj.nombre_archivo, adj.ruta, adj.fecha, adj.descripcion),
+        )
+        return c.lastrowid
+
+
+def eliminar_adjunto(adj_id: int) -> Optional[str]:
+    """Elimina el registro y retorna la ruta del archivo para borrado externo."""
+    with _connect() as conn:
+        row = conn.execute("SELECT ruta FROM archivos_adjuntos WHERE id=?", (adj_id,)).fetchone()
+        if row:
+            conn.execute("DELETE FROM archivos_adjuntos WHERE id=?", (adj_id,))
+            return row["ruta"]
+        return None
+
+
+def listar_adjuntos(expediente_id: int) -> list[ArchivoAdjunto]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM archivos_adjuntos WHERE expediente_id=? ORDER BY fecha DESC, id DESC",
+            (expediente_id,),
+        ).fetchall()
+        return [ArchivoAdjunto(**dict(r)) for r in rows]

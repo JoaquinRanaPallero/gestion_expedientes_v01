@@ -1,12 +1,14 @@
 """Panel de detalle de expediente con solapas internas."""
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from datetime import datetime, timedelta
+import os
+import shutil
 
 import database as db
-from models import Parte, PasoProcesal, Vencimiento, Honorario, Gasto
-from ui.dialogs import FormDialog, confirmar, fecha_hoy, fecha_display
+from models import Parte, PasoProcesal, Vencimiento, Honorario, Gasto, ArchivoAdjunto
+from ui.dialogs import FormDialog, confirmar, fecha_hoy, fecha_display, normalizar_monto
 from ui.styles import COLOR_VENCIDO, COLOR_INMINENTE, COLOR_CUMPLIDO
 from ui.honorarios import _fmt_monto
 
@@ -57,6 +59,7 @@ class VentanaDetalleExpediente(tk.Toplevel):
         self._tab_vencimientos()
         self._tab_honorarios()
         self._tab_gastos()
+        self._tab_adjuntos()
 
     # --- Solapa Datos ---
     def _tab_datos(self):
@@ -220,7 +223,7 @@ class VentanaDetalleExpediente(tk.Toplevel):
             {"name": "fecha", "label": "Fecha (DD/MM/AAAA)", "required": True,
              "validate": "fecha", "default": fecha_hoy()},
             {"name": "descripcion", "label": "Descripcion", "required": True},
-            {"name": "observaciones", "label": "Observaciones", "type": "text", "height": 8},
+            {"name": "observaciones", "label": "Observaciones", "type": "text", "width": 100, "height": 20},
         ]
 
     def _nuevo_paso(self):
@@ -453,10 +456,13 @@ class VentanaDetalleExpediente(tk.Toplevel):
         self.wait_window(dlg)
         if dlg.result:
             r = dlg.result
+            monto = int(normalizar_monto(r["monto"]))
+            if not confirmar(self, f"Registrar honorario por {r['moneda']} {_fmt_monto(monto)}?"):
+                return
             try:
                 db.crear_honorario(Honorario(
                     expediente_id=self.exp_id, fecha=r["fecha"],
-                    monto=float(r["monto"]), moneda=r["moneda"],
+                    monto=monto, moneda=r["moneda"],
                     concepto=r["concepto"], forma_pago=r["forma_pago"],
                 ))
             except Exception as e:
@@ -534,10 +540,13 @@ class VentanaDetalleExpediente(tk.Toplevel):
         self.wait_window(dlg)
         if dlg.result:
             r = dlg.result
+            monto = int(normalizar_monto(r["monto"]))
+            if not confirmar(self, f"Registrar gasto por {r['moneda']} {_fmt_monto(monto)}?"):
+                return
             try:
                 db.crear_gasto(Gasto(
                     expediente_id=self.exp_id, fecha=r["fecha"],
-                    monto=float(r["monto"]), moneda=r["moneda"],
+                    monto=monto, moneda=r["moneda"],
                     descripcion=r["descripcion"],
                 ))
             except Exception as e:
@@ -556,3 +565,130 @@ class VentanaDetalleExpediente(tk.Toplevel):
                 messagebox.showerror("Error", f"No se pudo eliminar el gasto:\n{e}", parent=self)
                 return
             self._refrescar_gastos()
+
+    # --- Solapa Adjuntos ---
+    def _tab_adjuntos(self):
+        frame = ttk.Frame(self.notebook, padding=10)
+        self.notebook.add(frame, text="Adjuntos")
+
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(fill="x", pady=(0, 5))
+        ttk.Button(btn_frame, text="+ Agregar archivo",
+                   command=self._nuevo_adjunto).pack(side="left")
+        ttk.Button(btn_frame, text="Abrir",
+                   command=self._abrir_adjunto).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Eliminar",
+                   command=self._eliminar_adjunto).pack(side="left")
+
+        cols = ("nombre_archivo", "descripcion", "fecha")
+        self.tree_adjuntos = ttk.Treeview(frame, columns=cols, show="headings", height=12)
+        self.tree_adjuntos.heading("nombre_archivo", text="Archivo")
+        self.tree_adjuntos.column("nombre_archivo", width=300, minwidth=150)
+        self.tree_adjuntos.heading("descripcion", text="Descripcion")
+        self.tree_adjuntos.column("descripcion", width=350, minwidth=100)
+        self.tree_adjuntos.heading("fecha", text="Fecha")
+        self.tree_adjuntos.column("fecha", width=100, minwidth=80)
+
+        self.tree_adjuntos.bind("<Double-1>", lambda e: self._abrir_adjunto())
+
+        sb = ttk.Scrollbar(frame, orient="vertical", command=self.tree_adjuntos.yview)
+        self.tree_adjuntos.configure(yscrollcommand=sb.set)
+        self.tree_adjuntos.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+
+        self._refrescar_adjuntos()
+
+    def _refrescar_adjuntos(self):
+        for item in self.tree_adjuntos.get_children():
+            self.tree_adjuntos.delete(item)
+        for a in db.listar_adjuntos(self.exp_id):
+            self.tree_adjuntos.insert("", "end", iid=str(a.id),
+                                      values=(a.nombre_archivo, a.descripcion, fecha_display(a.fecha)))
+
+    def _nuevo_adjunto(self):
+        rutas = filedialog.askopenfilenames(
+            title="Seleccionar archivos para adjuntar",
+            parent=self,
+        )
+        if not rutas:
+            return
+
+        # Pedir descripcion opcional (una sola vez para todos los archivos)
+        descripcion = ""
+        if len(rutas) == 1:
+            campos = [{"name": "descripcion", "label": "Descripcion (opcional)"}]
+            dlg = FormDialog(self, "Descripcion del adjunto", campos)
+            self.wait_window(dlg)
+            if dlg.result:
+                descripcion = dlg.result["descripcion"]
+
+        destino_base = db._get_adjuntos_dir()
+        destino_exp = os.path.join(destino_base, str(self.exp_id))
+        os.makedirs(destino_exp, exist_ok=True)
+
+        for ruta_origen in rutas:
+            nombre = os.path.basename(ruta_origen)
+            ruta_destino = os.path.join(destino_exp, nombre)
+
+            # Si ya existe un archivo con el mismo nombre, agregar sufijo
+            if os.path.exists(ruta_destino):
+                base, ext = os.path.splitext(nombre)
+                contador = 1
+                while os.path.exists(ruta_destino):
+                    ruta_destino = os.path.join(destino_exp, f"{base}_{contador}{ext}")
+                    contador += 1
+                nombre = os.path.basename(ruta_destino)
+
+            try:
+                shutil.copy2(ruta_origen, ruta_destino)
+                try:
+                    db.crear_adjunto(ArchivoAdjunto(
+                        expediente_id=self.exp_id,
+                        nombre_archivo=nombre,
+                        ruta=ruta_destino,
+                        fecha=datetime.now().strftime("%Y-%m-%d"),
+                        descripcion=descripcion,
+                    ))
+                except Exception:
+                    # Si falla la DB, borrar el archivo copiado para no dejar huerfanos
+                    if os.path.exists(ruta_destino):
+                        os.remove(ruta_destino)
+                    raise
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo adjuntar '{nombre}':\n{e}", parent=self)
+
+        self._refrescar_adjuntos()
+
+    def _abrir_adjunto(self):
+        sel = self.tree_adjuntos.selection()
+        if not sel:
+            messagebox.showinfo("Seleccionar", "Seleccione un archivo.", parent=self)
+            return
+        adj_id = int(sel[0])
+        adjuntos = db.listar_adjuntos(self.exp_id)
+        adj = next((a for a in adjuntos if a.id == adj_id), None)
+        if not adj:
+            return
+        if not os.path.exists(adj.ruta):
+            messagebox.showerror("Error", f"El archivo no se encuentra en:\n{adj.ruta}", parent=self)
+            return
+        os.startfile(adj.ruta)
+
+    def _eliminar_adjunto(self):
+        sel = self.tree_adjuntos.selection()
+        if not sel:
+            return
+        if confirmar(self, "Eliminar el archivo adjunto seleccionado?"):
+            try:
+                adj_id = int(sel[0])
+                # Obtener ruta antes de borrar el registro
+                adjuntos = db.listar_adjuntos(self.exp_id)
+                adj = next((a for a in adjuntos if a.id == adj_id), None)
+                # Borrar archivo fisico primero, luego el registro
+                if adj and os.path.exists(adj.ruta):
+                    os.remove(adj.ruta)
+                db.eliminar_adjunto(adj_id)
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo eliminar el adjunto:\n{e}", parent=self)
+                return
+            self._refrescar_adjuntos()

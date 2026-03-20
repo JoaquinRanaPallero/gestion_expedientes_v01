@@ -74,3 +74,13 @@ class Gasto:
     monto: float = 0.0
     moneda: str = "ARS"  # ARS / USD
     descripcion: str = ""
+
+
+@dataclass
+class ArchivoAdjunto:
+    id: Optional[int] = None
+    expediente_id: Optional[int] = None
+    nombre_archivo: str = ""
+    ruta: str = ""
+    fecha: str = ""
+    descripcion: str = ""
